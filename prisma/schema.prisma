@@ -1,0 +1,105 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+enum BookingStatus {
+  CONFIRMED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+}
+
+enum DayOfWeek {
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+model BusinessOwner {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  passwordHash   String
+  name           String
+  services       Service[]      @relation("OwnerServices")
+  availabilities Availability[] @relation("OwnerAvailabilities")
+  bookings       Booking[]      @relation("OwnerBookings")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@map("business_owners")
+  @@index([email])
+}
+
+model Customer {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  bookings     Booking[] @relation("CustomerBookings")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("customers")
+  @@index([email])
+}
+
+model Service {
+  id        String        @id @default(uuid())
+  ownerId   String
+  owner     BusinessOwner @relation("OwnerServices", fields: [ownerId], references: [id], onDelete: Restrict)
+  name      String
+  duration  Int           // In minutes
+  price     Decimal       @db.Decimal(10, 2)
+  isDeleted Boolean       @default(false) // Soft deletion
+  bookings  Booking[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@map("services")
+  @@index([ownerId])
+}
+
+model Availability {
+  id        String        @id @default(uuid())
+  ownerId   String
+  owner     BusinessOwner @relation("OwnerAvailabilities", fields: [ownerId], references: [id], onDelete: Cascade)
+  dayOfWeek DayOfWeek
+  startTime String        // "HH:mm" format (e.g. "09:00")
+  endTime   String        // "HH:mm" format (e.g. "17:00")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([ownerId, dayOfWeek, startTime, endTime])
+  @@map("availabilities")
+  @@index([ownerId, dayOfWeek])
+}
+
+model Booking {
+  id         String        @id @default(uuid())
+  customerId String
+  customer   Customer      @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: Restrict)
+  ownerId    String
+  owner      BusinessOwner @relation("OwnerBookings", fields: [ownerId], references: [id], onDelete: Restrict)
+  serviceId  String
+  service    Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  startTime  DateTime      // UTC DateTime
+  endTime    DateTime      // UTC DateTime (startTime + service.duration)
+  status     BookingStatus @default(CONFIRMED)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@map("bookings")
+  @@index([ownerId, startTime])
+  @@index([customerId])
+  @@index([serviceId])
+}
